@@ -1,5 +1,7 @@
 // Runtime config (§7). Env holds only non-secret flags + the Supabase bootstrap
 // credentials. Real secrets come from Supabase Vault (see lib/vault.js).
+// Local dev reads .env via dotenv; a no-op when the file is absent (Render).
+import 'dotenv/config';
 
 function bool(value, fallback) {
   if (value === undefined || value === '') return fallback;
@@ -27,6 +29,10 @@ export const config = {
   // safety net for hallucinated facts.
   ytAutoPublic: bool(process.env.YT_AUTO_PUBLIC, false),
 
+  // When false, skip the YouTube upload entirely (Drive/TikTok-only phase).
+  // The youtube_shorts destination row stays 'pending' for a later backfill.
+  ytEnabled: bool(process.env.YT_ENABLED, true),
+
   gpu: {
     provider: process.env.GPU_PROVIDER || 'mock', // mock | runpod | vastai
     instanceType: process.env.GPU_INSTANCE_TYPE || 'NVIDIA_RTX_4090',
@@ -41,6 +47,10 @@ export const config = {
     // 'auto' => detect on boot. 'true'/'false' force it.
     writeEnabled: process.env.DRIVE_WRITE_ENABLED || 'auto',
     queueFolderName: 'TikTok Queue',
+    // ID of a folder in the owner's Drive shared with the service account.
+    // Required in practice: service accounts have no storage quota of their
+    // own, so writes must land in a human-owned (or shared-drive) folder.
+    queueFolderId: process.env.DRIVE_QUEUE_FOLDER_ID || '',
   },
 
   // Which series slugs the cron controller runs.

@@ -57,6 +57,8 @@ Tables are namespaced `hs_` (§3): `hs_series`, `hs_episodes`, `hs_render_jobs`,
    \i sql/001_schema.sql
    \i sql/002_storage_buckets.sql
    \i sql/003_seed_example.sql   -- optional example series
+   \i sql/004_vault_rpc.sql      -- service-role-only Vault read RPC
+   \i sql/005_rls.sql            -- RLS lockdown (service-role-only DB)
    ```
 2. **Vault secrets** (server-side only). Add these secrets in Supabase Vault:
    - `anthropic_api_key` — Claude API key
@@ -65,8 +67,12 @@ Tables are namespaced `hs_` (§3): `hs_series`, `hs_episodes`, `hs_render_jobs`,
    - `gpu_provider_runpod` — JSON `{ "apiKey", "templateId", ... }` (when GPU is wired)
 3. **Env**: copy `.env.example` to `.env`, set `SUPABASE_URL` +
    `SUPABASE_SERVICE_ROLE_KEY` and the config flags (§7). For local dev you may
-   set `ANTHROPIC_API_KEY` in env as a Vault fallback.
+   set `ANTHROPIC_API_KEY` in env as a Vault fallback. `.env` is loaded via
+   dotenv; on Render set real env vars instead.
 4. `npm install`
+
+> **Node version:** supabase-js requires native `WebSocket` (Node 22+). On
+> Node 20.10+, run with `NODE_OPTIONS=--experimental-websocket`.
 
 ## Running
 

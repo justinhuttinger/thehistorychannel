@@ -2,9 +2,10 @@
 // Supabase Vault and are read server-side only, following the existing WCS
 // vault pattern. Never commit secrets or put them in client code.
 //
-// Vault secrets are exposed to the service role via the `vault.decrypted_secrets`
-// view. We read by name, cache in-process, and (in dev only) fall back to an
-// env var so local iteration does not require a populated Vault.
+// The vault schema is not exposed through the Data API, so secrets are read via
+// the service-role-only `public.hs_get_secret` RPC (sql/004_vault_rpc.sql). We
+// read by name, cache in-process, and (in dev only) fall back to an env var so
+// local iteration does not require a populated Vault.
 
 import { supabase } from './supabase.js';
 import { config } from '../config.js';
@@ -23,13 +24,9 @@ export async function getSecret(name) {
   let value = null;
   try {
     const { data, error } = await supabase()
-      .schema('vault')
-      .from('decrypted_secrets')
-      .select('decrypted_secret')
-      .eq('name', name)
-      .maybeSingle();
+      .rpc('hs_get_secret', { secret_name: name });
     if (error) throw error;
-    if (data) value = data.decrypted_secret;
+    if (data) value = data;
   } catch (err) {
     logger.warn('vault read failed, will try env fallback', { name, error: String(err) });
   }

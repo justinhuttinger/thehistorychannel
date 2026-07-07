@@ -119,7 +119,12 @@ export async function runSeries(slug, { dryRunPublish = false } = {}) {
     }
 
     // -- Stage 6: publish fan-out --
-    const ytDest = await publishYouTube(episode, shortsPath, yt);
+    const ytDest = config.ytEnabled
+      ? await publishYouTube(episode, shortsPath, yt)
+      : { status: 'disabled' };
+    if (!config.ytEnabled) {
+      logger.info('youtube publish disabled (YT_ENABLED=false)', { episodeId: episode.id });
+    }
     const ttDest = await publishTikTok(episode, tiktokPath, tt);
 
     await updateEpisode(episode.id, { state: 'published' });
