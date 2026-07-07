@@ -57,6 +57,8 @@ Tables are namespaced `hs_` (§3): `hs_series`, `hs_episodes`, `hs_render_jobs`,
    \i sql/001_schema.sql
    \i sql/002_storage_buckets.sql
    \i sql/003_seed_example.sql   -- optional example series
+   \i sql/004_vault_rpc.sql      -- service-role-only Vault read RPC
+   \i sql/005_rls.sql            -- RLS lockdown (service-role-only DB)
    ```
 2. **Vault secrets** (server-side only). Add these secrets in Supabase Vault:
    - `anthropic_api_key` — Claude API key
