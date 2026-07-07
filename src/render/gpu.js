@@ -32,7 +32,10 @@ const mockProvider = {
 
 const RUNPOD_REST = 'https://rest.runpod.io/v1';
 const POD_NAME_PREFIX = 'hs-render-';
-const READY_TIMEOUT_MS = 8 * 60 * 1000;
+// Cold machines that must pull the Docker image take ~7-8m to first response
+// (observed 446s live); warm machines take ~2-4m. 15m keeps headroom while the
+// GPU_MAX_RUNTIME_MIN ceiling still bounds total cost.
+const READY_TIMEOUT_MS = 15 * 60 * 1000;
 const READY_POLL_MS = 10 * 1000;
 
 async function runpodFetch(apiKey, path, options = {}) {
