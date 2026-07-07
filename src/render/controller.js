@@ -46,7 +46,7 @@ export async function renderEpisode(episode, series) {
       const out = await tts.synthesize({
         text: beat.narration,
         voiceId: series.voice_id,
-        endpoint: instance.endpoint,
+        endpoint: instance.ttsEndpoint || instance.endpoint,
       });
       audio.push(out);
     }
