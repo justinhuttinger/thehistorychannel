@@ -29,6 +29,10 @@ export const config = {
   // safety net for hallucinated facts.
   ytAutoPublic: bool(process.env.YT_AUTO_PUBLIC, false),
 
+  // When false, skip the YouTube upload entirely (Drive/TikTok-only phase).
+  // The youtube_shorts destination row stays 'pending' for a later backfill.
+  ytEnabled: bool(process.env.YT_ENABLED, true),
+
   gpu: {
     provider: process.env.GPU_PROVIDER || 'mock', // mock | runpod | vastai
     instanceType: process.env.GPU_INSTANCE_TYPE || 'NVIDIA_RTX_4090',
