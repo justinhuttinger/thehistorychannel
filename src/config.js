@@ -1,5 +1,7 @@
 // Runtime config (§7). Env holds only non-secret flags + the Supabase bootstrap
 // credentials. Real secrets come from Supabase Vault (see lib/vault.js).
+// Local dev reads .env via dotenv; a no-op when the file is absent (Render).
+import 'dotenv/config';
 
 function bool(value, fallback) {
   if (value === undefined || value === '') return fallback;
