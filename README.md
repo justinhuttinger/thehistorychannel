@@ -65,8 +65,12 @@ Tables are namespaced `hs_` (§3): `hs_series`, `hs_episodes`, `hs_render_jobs`,
    - `gpu_provider_runpod` — JSON `{ "apiKey", "templateId", ... }` (when GPU is wired)
 3. **Env**: copy `.env.example` to `.env`, set `SUPABASE_URL` +
    `SUPABASE_SERVICE_ROLE_KEY` and the config flags (§7). For local dev you may
-   set `ANTHROPIC_API_KEY` in env as a Vault fallback.
+   set `ANTHROPIC_API_KEY` in env as a Vault fallback. `.env` is loaded via
+   dotenv; on Render set real env vars instead.
 4. `npm install`
+
+> **Node version:** supabase-js requires native `WebSocket` (Node 22+). On
+> Node 20.10+, run with `NODE_OPTIONS=--experimental-websocket`.
 
 ## Running
 
