@@ -71,20 +71,27 @@ function podEndpoints(podId) {
   };
 }
 
-async function waitForComfy(endpoint) {
-  const deadline = Date.now() + READY_TIMEOUT_MS;
+async function waitForHttpOk(url, deadline, label) {
   for (;;) {
     try {
-      const res = await fetch(`${endpoint}/system_stats`, { signal: AbortSignal.timeout(10_000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       if (res.ok) return;
     } catch {
       // not up yet
     }
     if (Date.now() > deadline) {
-      throw new Error(`runpod pod did not become ready within ${READY_TIMEOUT_MS / 60000}m`);
+      throw new Error(`runpod pod ${label} not ready within ${READY_TIMEOUT_MS / 60000}m`);
     }
     await new Promise((r) => setTimeout(r, READY_POLL_MS));
   }
+}
+
+// The render uses BOTH services; XTTS finishes loading its model a few minutes
+// after ComfyUI answers, so returning on ComfyUI alone races the TTS stage.
+async function waitForPodReady({ endpoint, ttsEndpoint }) {
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  await waitForHttpOk(`${endpoint}/system_stats`, deadline, 'comfyui');
+  await waitForHttpOk(`${ttsEndpoint}/`, deadline, 'xtts');
 }
 
 function runpodProvider() {
@@ -122,7 +129,7 @@ function runpodProvider() {
       const { endpoint, ttsEndpoint } = podEndpoints(pod.id);
       logger.info('gpu spinUp (runpod)', { instanceId: pod.id, costPerHr: pod.costPerHr });
       try {
-        await waitForComfy(endpoint);
+        await waitForPodReady({ endpoint, ttsEndpoint });
       } catch (err) {
         // Never leave a pod running that the caller has no handle to tear down.
         await runpodFetch(creds.apiKey, `/pods/${pod.id}`, { method: 'DELETE' }).catch(() => {});
