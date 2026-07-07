@@ -41,6 +41,10 @@ export const config = {
     // 'auto' => detect on boot. 'true'/'false' force it.
     writeEnabled: process.env.DRIVE_WRITE_ENABLED || 'auto',
     queueFolderName: 'TikTok Queue',
+    // ID of a folder in the owner's Drive shared with the service account.
+    // Required in practice: service accounts have no storage quota of their
+    // own, so writes must land in a human-owned (or shared-drive) folder.
+    queueFolderId: process.env.DRIVE_QUEUE_FOLDER_ID || '',
   },
 
   // Which series slugs the cron controller runs.
