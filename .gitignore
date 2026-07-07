@@ -1,0 +1,18 @@
+node_modules/
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# Render/build working files
+/tmp-render/
+/work/
+*.mp4
+*.wav
+*.mp3
+*.png
+*.jpg
+!docs/**/*.png
+
+# OS
+.DS_Store

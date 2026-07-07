@@ -1,0 +1,24 @@
+{
+  "name": "history-shorts-pipeline",
+  "version": "0.1.0",
+  "description": "Automated animated-history short-form video pipeline. Growth-first: one vertical render per episode feeds YouTube Shorts (auto-upload, scheduled private) and TikTok (packaged to Google Drive for manual posting).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dry-run": "node scripts/dry-run.js",
+    "reaper": "node scripts/run-reaper.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "express": "^4.19.2",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}
