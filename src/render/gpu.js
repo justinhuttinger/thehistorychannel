@@ -22,27 +22,122 @@ const mockProvider = {
   },
 };
 
-// ---- RunPod skeleton. Real calls hit the RunPod GraphQL/REST API using a key
-// from Vault. Left as a structured stub so the interface is provable now and
-// the network calls can be filled in when the account is wired. ----
+// ---- RunPod provider. REST API (https://rest.runpod.io/v1) using creds from
+// Vault secret 'gpu_provider_runpod':
+//   { apiKey, templateId, networkVolumeId, dataCenterId,
+//     gpuTypeId?, cloudType?, interruptible? }
+// Pods are named with a prefix so list() only ever returns pipeline-created
+// pods; the reaper kills anything list() returns that has no active job, and
+// must never touch unrelated pods on the account. ----
+
+const RUNPOD_REST = 'https://rest.runpod.io/v1';
+const POD_NAME_PREFIX = 'hs-render-';
+const READY_TIMEOUT_MS = 8 * 60 * 1000;
+const READY_POLL_MS = 10 * 1000;
+
+async function runpodFetch(apiKey, path, options = {}) {
+  const res = await fetch(`${RUNPOD_REST}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`runpod ${options.method || 'GET'} ${path} ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+// REST timestamps look like "2026-07-07 17:12:52.52 +0000 UTC" (not ISO).
+function parseRunpodDate(s) {
+  if (!s) return null;
+  const iso = String(s).replace(' +0000 UTC', 'Z').replace(' ', 'T');
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+// The template starts ComfyUI on 8188 and XTTS on 8020; RunPod fronts each
+// exposed HTTP port at https://{podId}-{port}.proxy.runpod.net.
+function podEndpoints(podId) {
+  return {
+    endpoint: `https://${podId}-8188.proxy.runpod.net`,
+    ttsEndpoint: `https://${podId}-8020.proxy.runpod.net`,
+  };
+}
+
+async function waitForComfy(endpoint) {
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  for (;;) {
+    try {
+      const res = await fetch(`${endpoint}/system_stats`, { signal: AbortSignal.timeout(10_000) });
+      if (res.ok) return;
+    } catch {
+      // not up yet
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`runpod pod did not become ready within ${READY_TIMEOUT_MS / 60000}m`);
+    }
+    await new Promise((r) => setTimeout(r, READY_POLL_MS));
+  }
+}
+
 function runpodProvider() {
   return {
     async spinUp() {
-      const creds = await getSecretJson('gpu_provider_runpod'); // { apiKey, templateId, ... }
-      // TODO: POST podRentInterruptable with creds.templateId + config.gpu.instanceType.
-      throw new Error(
-        'runpod provider not yet wired; set GPU_PROVIDER=mock for dry runs. ' +
-          `(have creds for account: ${Boolean(creds.apiKey)})`,
-      );
+      const creds = await getSecretJson('gpu_provider_runpod');
+      for (const field of ['apiKey', 'templateId', 'networkVolumeId', 'dataCenterId']) {
+        if (!creds[field]) throw new Error(`gpu_provider_runpod vault secret missing "${field}"`);
+      }
+      const body = {
+        name: `${POD_NAME_PREFIX}${Date.now()}`,
+        cloudType: creds.cloudType || 'SECURE',
+        computeType: 'GPU',
+        gpuTypeIds: [creds.gpuTypeId || 'NVIDIA GeForce RTX 4090'],
+        gpuCount: 1,
+        dataCenterIds: [creds.dataCenterId],
+        networkVolumeId: creds.networkVolumeId,
+        volumeMountPath: '/workspace',
+        containerDiskInGb: 40,
+        templateId: creds.templateId,
+        interruptible: creds.interruptible !== false,
+      };
+      let pod;
+      try {
+        pod = await runpodFetch(creds.apiKey, '/pods', { method: 'POST', body: JSON.stringify(body) });
+      } catch (err) {
+        if (!body.interruptible) throw err;
+        // Spot capacity dried up; fall back to on-demand rather than skip the day.
+        logger.warn('runpod spot spinUp failed, retrying on-demand', { error: String(err) });
+        pod = await runpodFetch(creds.apiKey, '/pods', {
+          method: 'POST',
+          body: JSON.stringify({ ...body, interruptible: false }),
+        });
+      }
+      const { endpoint, ttsEndpoint } = podEndpoints(pod.id);
+      logger.info('gpu spinUp (runpod)', { instanceId: pod.id, costPerHr: pod.costPerHr });
+      try {
+        await waitForComfy(endpoint);
+      } catch (err) {
+        // Never leave a pod running that the caller has no handle to tear down.
+        await runpodFetch(creds.apiKey, `/pods/${pod.id}`, { method: 'DELETE' }).catch(() => {});
+        throw err;
+      }
+      return { instanceId: pod.id, endpoint, ttsEndpoint };
     },
     async tearDown(instanceId) {
       const creds = await getSecretJson('gpu_provider_runpod');
-      // TODO: POST podTerminate(instanceId) with creds.apiKey.
-      logger.warn('runpod tearDown not wired', { instanceId, haveKey: Boolean(creds.apiKey) });
+      await runpodFetch(creds.apiKey, `/pods/${instanceId}`, { method: 'DELETE' });
+      logger.info('gpu tearDown (runpod)', { instanceId });
     },
     async list() {
-      // TODO: query myself.pods and return [{ instanceId, createdAt }]
-      return [];
+      const creds = await getSecretJson('gpu_provider_runpod');
+      const pods = (await runpodFetch(creds.apiKey, '/pods')) || [];
+      return pods
+        .filter((p) => p.name && p.name.startsWith(POD_NAME_PREFIX))
+        .map((p) => ({ instanceId: p.id, createdAt: parseRunpodDate(p.createdAt) }));
     },
   };
 }
