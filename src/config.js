@@ -41,6 +41,9 @@ export const config = {
 
   tts: {
     provider: process.env.TTS_PROVIDER || 'mock', // mock | xtts | <paid slug>
+    // Pitch-preserving narration speed-up applied at compose time (ffmpeg
+    // atempo). 1.0 = as synthesized; short-form pacing wants ~1.15.
+    voiceSpeed: Number(process.env.VOICE_SPEED || 1.15),
   },
 
   drive: {
@@ -66,10 +69,11 @@ export const config = {
   anthropicApiKeyEnv: process.env.ANTHROPIC_API_KEY || '',
 };
 
-// Word budget targets by length profile (~150 wpm, §2/§6).
+// Word budget targets by length profile (~150 wpm, §2/§6). More beats = a new
+// visual every ~6-10 seconds, which short-form pacing demands.
 export const LENGTH_PROFILES = {
-  short: { minSeconds: 30, maxSeconds: 45, targetWords: 95, beats: [1, 2] },
-  mono: { minSeconds: 60, maxSeconds: 90, targetWords: 190, beats: [3, 5] },
+  short: { minSeconds: 30, maxSeconds: 45, targetWords: 95, beats: [4, 6] },
+  mono: { minSeconds: 60, maxSeconds: 90, targetWords: 190, beats: [8, 12] },
 };
 
 export function lengthProfile(name) {

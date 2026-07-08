@@ -51,7 +51,7 @@ function wanWorkflow({ prompt, seed }) {
         negative: ['neg', 0],
         latent_image: ['latent', 0],
         seed,
-        steps: 20,
+        steps: 30,
         cfg: 5,
         sampler_name: 'uni_pc',
         scheduler: 'simple',
