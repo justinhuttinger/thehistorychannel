@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import ffmpegStatic from 'ffmpeg-static';
+import { resolveFfmpeg } from './ffmpeg.js';
 import { logger } from '../lib/logger.js';
 
 const UA = 'history-shorts-pipeline/1.0 (github.com/justinhuttinger/thehistorychannel)';
@@ -27,11 +27,6 @@ const FONT_CANDIDATES = [
 const font = () => FONT_CANDIDATES.find((p) => existsSync(p)) || null;
 const escFilterPath = (p) => p.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-function ffmpegBin() {
-  if (ffmpegStatic && existsSync(ffmpegStatic)) return ffmpegStatic;
-  const r = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' });
-  return r.status === 0 ? 'ffmpeg' : null;
-}
 
 async function geocodeOnce(query) {
   const q = new URLSearchParams({ q: query, format: 'json', limit: '1' });
@@ -80,7 +75,7 @@ function lonLatToTile(lon, lat, z) {
 // Returns { image: Buffer, ext: 'png' }. Throws on failure; the caller decides
 // whether to fall back to a generated visual.
 export async function renderMap(place, { zoom = 6 } = {}) {
-  const ffmpeg = ffmpegBin();
+  const ffmpeg = await resolveFfmpeg();
   if (!ffmpeg) throw new Error('renderMap: ffmpeg unavailable');
   const { lat, lon } = await geocode(place);
   const { x, y } = lonLatToTile(lon, lat, zoom);

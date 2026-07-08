@@ -7,20 +7,12 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import ffmpegStatic from 'ffmpeg-static';
+import { resolveFfmpeg } from './ffmpeg.js';
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
-
-// Prefer the bundled static binary (works on Windows dev boxes and Render's
-// native Node runtime, neither of which ships ffmpeg); fall back to PATH.
-function ffmpegBin() {
-  if (ffmpegStatic && existsSync(ffmpegStatic)) return ffmpegStatic;
-  const r = spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' });
-  return r.status === 0 ? 'ffmpeg' : null;
-}
 
 // Word-wrap caption text; drawtext does not wrap long lines on its own.
 function wrapCaption(text, width = 34) {
@@ -91,7 +83,7 @@ export async function compose({ beats, burnCaptions = true }) {
   const speedFactor = Math.min(2, Math.max(0.5, config.tts.voiceSpeed || 1));
   const totalDuration = beats.reduce((s, b) => s + b.durationSeconds, 0) / speedFactor;
 
-  const ffmpeg = ffmpegBin();
+  const ffmpeg = await resolveFfmpeg();
   if (!ffmpeg) {
     logger.warn('ffmpeg not found; writing placeholder master (dry-run mode)');
     // Minimal placeholder so downstream storage/publish flow can run.
