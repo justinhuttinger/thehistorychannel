@@ -64,6 +64,10 @@ export const config = {
   // Which series slugs the cron controller runs.
   seriesEnabled: list(process.env.SERIES_ENABLED),
 
+  // Posting schedule (server-local time, UTC on Render): comma-separated HH:MM
+  // list applied to every enabled series. Empty = each series' own post_time.
+  postTimes: list(process.env.POST_TIMES),
+
   defaultLengthProfile: process.env.TARGET_LENGTH_PROFILE || 'short',
 
   notify: {
