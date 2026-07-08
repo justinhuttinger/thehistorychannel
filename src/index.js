@@ -54,19 +54,24 @@ async function registerCrons() {
     runReaper().catch((err) => logger.error('reaper cron failed', { error: String(err) }));
   });
 
-  // One controller per active series, staggered by post_time.
+  // One controller per active series. POST_TIMES (if set) schedules multiple
+  // runs per day for every enabled series; otherwise the series' own
+  // post_time runs once daily. Times are server-local (UTC on Render).
   for (const slug of config.seriesEnabled) {
     const series = await getSeriesBySlug(slug).catch(() => null);
     if (!series || !series.active) {
       logger.warn('series enabled but not active/found; skipping cron', { slug });
       continue;
     }
-    const expr = dailyCron(series.post_time);
-    cron.schedule(expr, () => {
-      logger.info('cron run start', { slug, expr });
-      runSeries(slug).catch((err) => logger.error('cron run failed', { slug, error: String(err) }));
-    });
-    logger.info('registered series cron', { slug, expr });
+    const times = config.postTimes.length ? config.postTimes : [series.post_time];
+    for (const t of times) {
+      const expr = dailyCron(t);
+      cron.schedule(expr, () => {
+        logger.info('cron run start', { slug, expr });
+        runSeries(slug).catch((err) => logger.error('cron run failed', { slug, error: String(err) }));
+      });
+      logger.info('registered series cron', { slug, expr });
+    }
   }
 }
 
