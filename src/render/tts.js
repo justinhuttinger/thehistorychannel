@@ -41,12 +41,51 @@ const mockTts = {
   },
 };
 
+// Series voice_id slugs -> XTTS v2 built-in studio speakers. Unknown slugs are
+// passed through verbatim so a real XTTS speaker name in hs_series works too.
+const XTTS_SPEAKERS = {
+  narrator_male_low: 'Damien Black',
+  narrator_male: 'Viktor Eka',
+  narrator_female: 'Claribel Dervla',
+};
+const XTTS_DEFAULT_SPEAKER = 'Damien Black';
+const XTTS_LANGUAGE = 'en';
+
+// Duration from the WAV header: find the data chunk, divide by byte rate.
+function wavDurationSeconds(buf) {
+  if (buf.length < 44 || buf.toString('ascii', 0, 4) !== 'RIFF') {
+    throw new Error('xtts returned a non-WAV response');
+  }
+  const sampleRate = buf.readUInt32LE(24);
+  const channels = buf.readUInt16LE(22);
+  const bitsPerSample = buf.readUInt16LE(34);
+  const dataIdx = buf.indexOf('data');
+  if (dataIdx < 0) throw new Error('xtts WAV missing data chunk');
+  const dataSize = buf.readUInt32LE(dataIdx + 4);
+  return dataSize / (sampleRate * channels * (bitsPerSample / 8));
+}
+
 function xttsTts() {
   return {
-    async synthesize(/* { text, voiceId, endpoint } */) {
-      // TODO: POST text + voiceId to the XTTS server running on the GPU box,
-      // return the returned wav buffer and measured duration.
-      throw new Error('xtts provider not yet wired; set TTS_PROVIDER=mock for dry runs');
+    async synthesize({ text, voiceId, endpoint }) {
+      if (!endpoint) throw new Error('xtts synthesize: no endpoint (GPU pod TTS URL) provided');
+      const speaker = XTTS_SPEAKERS[voiceId] || voiceId || XTTS_DEFAULT_SPEAKER;
+      const params = new URLSearchParams({
+        text: String(text),
+        speaker_id: speaker,
+        language_id: XTTS_LANGUAGE,
+      });
+      const res = await fetch(`${endpoint}/api/tts?${params}`, {
+        signal: AbortSignal.timeout(3 * 60 * 1000),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`xtts /api/tts ${res.status}: ${body.slice(0, 200)}`);
+      }
+      const audio = Buffer.from(await res.arrayBuffer());
+      const durationSeconds = wavDurationSeconds(audio);
+      logger.info('xtts synthesized', { chars: String(text).length, durationSeconds, speaker });
+      return { audio, durationSeconds, ext: 'wav' };
     },
   };
 }

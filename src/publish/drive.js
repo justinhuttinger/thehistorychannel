@@ -44,12 +44,16 @@ export async function verifyDriveWriteScope() {
   }
   try {
     const drive = await driveClient();
+    // Probe with a real BINARY upload, not a folder: folders are quota-free,
+    // but Google rejects service-account file uploads outright ("Service
+    // Accounts do not have storage quota"), so a folder probe passes while
+    // every actual video upload fails. Media upload is the honest test.
     const probe = await drive.files.create({
       requestBody: {
-        name: `hs-write-probe-${Date.now()}`,
-        mimeType: 'application/vnd.google-apps.folder',
+        name: `hs-write-probe-${Date.now()}.bin`,
         parents: [config.drive.queueFolderId],
       },
+      media: { mimeType: 'application/octet-stream', body: Readable.from(Buffer.from('probe')) },
       fields: 'id',
       supportsAllDrives: true,
     });
