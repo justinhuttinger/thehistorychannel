@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
+import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 
 const WIDTH = 1080;
@@ -38,6 +39,32 @@ function wrapCaption(text, width = 34) {
   return lines.join('\n');
 }
 
+// Split narration into short karaoke-style caption chunks (3-6 words), timed
+// proportionally across the beat. Chunks break early at punctuation so phrases
+// stay natural.
+function chunkCaption(text, minWords = 3, maxWords = 5) {
+  const words = String(text).replace(/\s+/g, ' ').trim().split(' ');
+  const chunks = [];
+  let cur = [];
+  for (const w of words) {
+    cur.push(w);
+    const punct = /[.,;:!?]$/.test(w);
+    if (cur.length >= maxWords || (punct && cur.length >= minWords)) {
+      chunks.push(cur.join(' '));
+      cur = [];
+    }
+  }
+  if (cur.length) {
+    // Avoid a dangling 1-2 word tail; merge into the previous chunk.
+    if (chunks.length && cur.length < minWords) {
+      chunks[chunks.length - 1] += ` ${cur.join(' ')}`;
+    } else {
+      chunks.push(cur.join(' '));
+    }
+  }
+  return chunks;
+}
+
 // Escape a path for use inside a filtergraph argument (Windows drive colons
 // and backslashes both break filter parsing).
 function escFilterPath(p) {
@@ -61,7 +88,8 @@ function captionFont() {
 // beats: [{ narrationText, audio: Buffer, ext, durationSeconds, image: Buffer, imageExt }]
 // Returns { video: Buffer, ext: 'mp4', durationSeconds }.
 export async function compose({ beats, burnCaptions = true }) {
-  const totalDuration = beats.reduce((s, b) => s + b.durationSeconds, 0);
+  const speedFactor = Math.min(2, Math.max(0.5, config.tts.voiceSpeed || 1));
+  const totalDuration = beats.reduce((s, b) => s + b.durationSeconds, 0) / speedFactor;
 
   const ffmpeg = ffmpegBin();
   if (!ffmpeg) {
@@ -85,21 +113,40 @@ export async function compose({ beats, burnCaptions = true }) {
       writeFileSync(imgPath, beat.image);
       writeFileSync(audPath, beat.audio);
 
+      // Narration speed-up (pitch-preserving). Clip duration shrinks to match.
+      const speed = Math.min(2, Math.max(0.5, config.tts.voiceSpeed || 1));
+      const effDuration = beat.durationSeconds / speed;
+
       const scalePad =
         `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
         `crop=${WIDTH}:${HEIGHT}`;
-      // Caption via textfile= (never inline text=): narration contains
-      // apostrophes/commas that cannot be reliably escaped in a filtergraph.
+
+      // Karaoke captions: 3-6 word chunks shown one at a time, timed
+      // proportionally by word count across the (sped-up) beat. Each chunk is
+      // its own drawtext with an enable window; text goes via textfile= (never
+      // inline text=, which cannot be safely escaped).
       let caption = '';
       if (burnCaptions && beat.narrationText) {
-        const capPath = join(dir, `cap-${i}.txt`);
-        writeFileSync(capPath, wrapCaption(beat.narrationText));
         const font = captionFont();
-        caption =
-          `,drawtext=textfile='${escFilterPath(capPath)}':expansion=none:` +
-          (font ? `fontfile='${escFilterPath(font)}':` : '') +
-          `fontcolor=white:fontsize=40:box=1:boxcolor=black@0.5:boxborderw=12:` +
-          `x=(w-text_w)/2:y=h-200-th:line_spacing=8`;
+        const chunks = chunkCaption(beat.narrationText);
+        const totalWords = chunks.reduce((s, c) => s + c.split(' ').length, 0);
+        let cursor = 0;
+        const filters = chunks.map((chunk, j) => {
+          const capPath = join(dir, `cap-${i}-${j}.txt`);
+          writeFileSync(capPath, wrapCaption(chunk, 18));
+          const start = (cursor / totalWords) * effDuration;
+          cursor += chunk.split(' ').length;
+          const end = j === chunks.length - 1 ? effDuration : (cursor / totalWords) * effDuration;
+          return (
+            `drawtext=textfile='${escFilterPath(capPath)}':expansion=none:` +
+            (font ? `fontfile='${escFilterPath(font)}':` : '') +
+            `fontcolor=white:fontsize=72:borderw=4:bordercolor=black:` +
+            `box=1:boxcolor=black@0.35:boxborderw=18:` +
+            `x=(w-text_w)/2:y=(h-th)*0.70:line_spacing=10:` +
+            `enable='between(t,${start.toFixed(3)},${end.toFixed(3)})'`
+          );
+        });
+        caption = `,${filters.join(',')}`;
       }
 
       const args = [
@@ -107,10 +154,11 @@ export async function compose({ beats, burnCaptions = true }) {
         '-loop', '1', '-i', imgPath,
         '-i', audPath,
         '-vf', `${scalePad}${caption}`,
+        ...(speed !== 1 ? ['-filter:a', `atempo=${speed}`] : []),
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
         '-shortest',
-        '-t', String(beat.durationSeconds),
+        '-t', String(effDuration),
         clipPath,
       ];
       const r = spawnSync(ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
