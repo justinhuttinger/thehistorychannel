@@ -113,6 +113,10 @@ function runpodProvider() {
         containerDiskInGb: 40,
         templateId: creds.templateId,
         interruptible: creds.interruptible !== false,
+        // Hosts with drivers older than the image's CUDA never start the
+        // container (silent infinite stall). Constrain scheduling to hosts
+        // that can actually run the cu12.8 image.
+        allowedCudaVersions: creds.allowedCudaVersions || ['12.8', '12.9', '13.0'],
       };
       let pod;
       try {

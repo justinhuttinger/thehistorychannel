@@ -27,12 +27,19 @@ function looksLikeGarbage(/* buffer */) {
 const WAN_UNET = 'wan2.2_ti2v_5B_fp16.safetensors';
 const WAN_CLIP = 'umt5_xxl_fp8_e4m3fn_scaled.safetensors';
 const WAN_VAE = 'wan2.2_vae.safetensors';
+// Anti-AI-look: forbid every telltale synthetic style, push toward photography.
 const WAN_NEGATIVE =
-  'blurry, low quality, distorted, deformed, text, watermark, logo, signature, extra limbs';
-const GEN_TIMEOUT_MS = 8 * 60 * 1000; // first call also pays model load from the volume
+  'blurry, low quality, distorted, deformed, text, watermark, logo, signature, ' +
+  'extra limbs, cartoon, anime, painting, illustration, drawing, CGI, 3d render, ' +
+  'video game, plastic skin, waxy, airbrushed, oversaturated colors, neon, ' +
+  'symmetrical face, uncanny, digital art';
+const GEN_TIMEOUT_MS = 10 * 60 * 1000; // first call also pays model load from the volume
 const POLL_MS = 3000;
 
-function wanWorkflow({ prompt, seed }) {
+// mode 'video': short motion clip per beat (looped under narration by compose).
+// mode 'image': single still per beat. Video frames must satisfy (n-1)%4==0.
+function wanWorkflow({ prompt, seed, mode, frames }) {
+  const video = mode === 'video';
   return {
     unet: { class_type: 'UNETLoader', inputs: { unet_name: WAN_UNET, weight_dtype: 'default' } },
     clip: { class_type: 'CLIPLoader', inputs: { clip_name: WAN_CLIP, type: 'wan', device: 'default' } },
@@ -41,7 +48,7 @@ function wanWorkflow({ prompt, seed }) {
     neg: { class_type: 'CLIPTextEncode', inputs: { clip: ['clip', 0], text: WAN_NEGATIVE } },
     latent: {
       class_type: 'Wan22ImageToVideoLatent',
-      inputs: { vae: ['vae', 0], width: 704, height: 1280, length: 1, batch_size: 1 },
+      inputs: { vae: ['vae', 0], width: 704, height: 1280, length: video ? frames : 1, batch_size: 1 },
     },
     sampler: {
       class_type: 'KSampler',
@@ -51,7 +58,7 @@ function wanWorkflow({ prompt, seed }) {
         negative: ['neg', 0],
         latent_image: ['latent', 0],
         seed,
-        steps: 30,
+        steps: video ? 20 : 30,
         cfg: 5,
         sampler_name: 'uni_pc',
         scheduler: 'simple',
@@ -59,7 +66,12 @@ function wanWorkflow({ prompt, seed }) {
       },
     },
     decode: { class_type: 'VAEDecode', inputs: { samples: ['sampler', 0], vae: ['vae', 0] } },
-    save: { class_type: 'SaveImage', inputs: { images: ['decode', 0], filename_prefix: 'hs_beat' } },
+    save: video
+      ? {
+          class_type: 'SaveWEBM',
+          inputs: { images: ['decode', 0], filename_prefix: 'hs_beat', codec: 'vp9', fps: 24, crf: 28 },
+        }
+      : { class_type: 'SaveImage', inputs: { images: ['decode', 0], filename_prefix: 'hs_beat' } },
   };
 }
 
@@ -78,14 +90,18 @@ async function comfy(endpoint, path, options = {}) {
 
 async function generateOne({ prompt, styleSuffix, endpoint }) {
   if (config.gpu.provider === 'mock') {
-    return { image: MOCK_PNG, ext: 'png' };
+    return { image: MOCK_PNG, ext: 'png', isVideo: false };
   }
   void styleSuffix; // already folded into prompt by generateVisual
 
+  const mode = config.gpu.wanMode;
   const seed = Math.floor(Math.random() * 2 ** 32);
   const submit = await comfy(endpoint, '/prompt', {
     method: 'POST',
-    body: JSON.stringify({ prompt: wanWorkflow({ prompt, seed }), client_id: 'history-shorts' }),
+    body: JSON.stringify({
+      prompt: wanWorkflow({ prompt, seed, mode, frames: config.gpu.videoFrames }),
+      client_id: 'history-shorts',
+    }),
   });
   const { prompt_id: promptId } = await submit.json();
   if (!promptId) throw new Error('comfyui /prompt returned no prompt_id');
@@ -100,15 +116,18 @@ async function generateOne({ prompt, styleSuffix, endpoint }) {
     if (entry.status && entry.status.completed === false && entry.status.status_str === 'error') {
       throw new Error(`comfyui workflow error: ${JSON.stringify(entry.status.messages || []).slice(0, 300)}`);
     }
-    const imgs = entry.outputs?.save?.images;
-    if (imgs && imgs.length) {
-      const { filename, subfolder, type } = imgs[0];
+    // SaveImage and SaveWEBM both report under outputs.save.images.
+    const outs = entry.outputs?.save?.images;
+    if (outs && outs.length) {
+      const { filename, subfolder, type } = outs[0];
       const q = new URLSearchParams({ filename, subfolder: subfolder || '', type: type || 'output' });
-      const view = await fetch(`${endpoint}/view?${q}`, { signal: AbortSignal.timeout(60_000) });
+      const view = await fetch(`${endpoint}/view?${q}`, { signal: AbortSignal.timeout(120_000) });
       if (!view.ok) throw new Error(`comfyui /view ${view.status}`);
-      const image = Buffer.from(await view.arrayBuffer());
-      logger.info('wan frame generated', { promptId, bytes: image.length });
-      return { image, ext: filename.endsWith('.webp') ? 'webp' : 'png' };
+      const media = Buffer.from(await view.arrayBuffer());
+      const ext = filename.split('.').pop();
+      const isVideo = ['webm', 'mp4'].includes(ext);
+      logger.info('wan media generated', { promptId, bytes: media.length, ext, isVideo });
+      return { image: media, ext, isVideo };
     }
   }
 }
