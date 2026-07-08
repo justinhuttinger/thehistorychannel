@@ -33,9 +33,12 @@ const mockProvider = {
 const RUNPOD_REST = 'https://rest.runpod.io/v1';
 const POD_NAME_PREFIX = 'hs-render-';
 // Cold machines that must pull the Docker image take ~7-8m to first response
-// (observed 446s live); warm machines take ~2-4m. 15m keeps headroom while the
-// GPU_MAX_RUNTIME_MIN ceiling still bounds total cost.
-const READY_TIMEOUT_MS = 15 * 60 * 1000;
+// (observed 446s live; some EU-RO-1 hosts observed >15m); warm machines take
+// ~2-4m. The GPU_MAX_RUNTIME_MIN ceiling still bounds total cost.
+const READY_TIMEOUT_MS = 20 * 60 * 1000;
+// XTTS loads its model minutes AFTER ComfyUI answers; a slow boot must not
+// starve its window (observed live: "xtts not ready within 15m").
+const XTTS_EXTRA_MS = 6 * 60 * 1000;
 const READY_POLL_MS = 10 * 1000;
 
 async function runpodFetch(apiKey, path, options = {}) {
@@ -94,7 +97,9 @@ async function waitForHttpOk(url, deadline, label) {
 async function waitForPodReady({ endpoint, ttsEndpoint }) {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   await waitForHttpOk(`${endpoint}/system_stats`, deadline, 'comfyui');
-  await waitForHttpOk(`${ttsEndpoint}/`, deadline, 'xtts');
+  // XTTS gets its own guaranteed window beyond whatever ComfyUI consumed.
+  const xttsDeadline = Math.max(deadline, Date.now() + XTTS_EXTRA_MS);
+  await waitForHttpOk(`${ttsEndpoint}/`, xttsDeadline, 'xtts');
 }
 
 function runpodProvider() {
