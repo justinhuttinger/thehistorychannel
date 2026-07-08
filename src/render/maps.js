@@ -33,18 +33,39 @@ function ffmpegBin() {
   return r.status === 0 ? 'ffmpeg' : null;
 }
 
-export async function geocode(place) {
-  const q = new URLSearchParams({ q: place, format: 'json', limit: '1' });
+async function geocodeOnce(query) {
+  const q = new URLSearchParams({ q: query, format: 'json', limit: '1' });
   const res = await fetch(`https://nominatim.openstreetmap.org/search?${q}`, {
     headers: { 'User-Agent': UA },
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`nominatim ${res.status}`);
   const results = await res.json();
-  if (!Array.isArray(results) || !results.length) {
-    throw new Error(`geocode: no result for "${place}"`);
+  return Array.isArray(results) && results.length
+    ? { lat: Number(results[0].lat), lon: Number(results[0].lon) }
+    : null;
+}
+
+// Scripts produce fuzzy places ("Meuse Valley, Belgium" is a region, not a
+// gazetteer entry). Try progressively simpler queries: full phrase, phrase
+// without leading descriptors (Valley/Region/etc dropped), each comma part
+// from most to least specific, so at worst the country still maps.
+export async function geocode(place) {
+  const parts = String(place).split(',').map((s) => s.trim()).filter(Boolean);
+  const candidates = [place];
+  if (parts.length > 1) {
+    const head = parts[0].replace(/\b(valley|region|area|district|province)\b/gi, '').trim();
+    if (head && head !== parts[0]) candidates.push([head, ...parts.slice(1)].join(', '));
+    for (let i = 1; i < parts.length; i++) candidates.push(parts.slice(i).join(', '));
   }
-  return { lat: Number(results[0].lat), lon: Number(results[0].lon) };
+  for (const c of candidates) {
+    const hit = await geocodeOnce(c);
+    if (hit) {
+      if (c !== place) logger.info('geocode fallback used', { place, matched: c });
+      return hit;
+    }
+  }
+  throw new Error(`geocode: no result for "${place}" or any fallback`);
 }
 
 function lonLatToTile(lon, lat, z) {

@@ -55,14 +55,18 @@ export async function renderEpisode(episode, series) {
     // ---- Visuals ----
     await updateRenderJob(job.id, { step: 'visuals' });
     const visuals = [];
+    // Exactly ONE map beat per episode: the model sometimes tags several
+    // beats with map_location despite instructions; honor only the first.
+    let mapUsed = false;
     for (const beat of beats) {
       checkDeadline();
       // Location beats show a REAL map (AI models hallucinate geography). If
       // map rendering fails, fall back to a generated visual so the episode
       // still completes.
-      if (beat.map_location) {
+      if (beat.map_location && !mapUsed) {
         try {
           visuals.push(await renderMap(beat.map_location));
+          mapUsed = true;
           continue;
         } catch (err) {
           logger.warn('map render failed, falling back to generated visual', {
