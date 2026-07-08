@@ -45,6 +45,9 @@ async function runpodFetch(apiKey, path, options = {}) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
+    // A hung RunPod API call must never hang the whole run (observed live:
+    // pod create stalled >20m with no pod, no error, run stuck in spinUp).
+    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
