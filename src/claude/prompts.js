@@ -58,10 +58,18 @@ export const SCRIPT_PROMPT = {
       'Requirements:',
       '- The first beat opens with the hook in the first ~3 seconds.',
       '- Clear narrative arc across beats. Momentum from the first line.',
+      '- Keep each beat narration SHORT: one punchy sentence, roughly 12 to 22 ' +
+        'words. Never two sentences in one beat.',
       '- Each beat has "narration" (what the voice says) and "visual_prompt" ' +
-        '(a concrete, animatable scene for an image/video model).',
-      '- visual_prompt describes a real scene: subject, setting, action, mood, ' +
-        'lighting. It is NOT text-on-screen and NOT captions. No words to render.',
+        '(a concrete scene for an image model).',
+      '- visual_prompt is a rich, cinematic single-image description: main ' +
+        'subject with era-accurate clothing/objects, specific setting, dramatic ' +
+        'action frozen mid-moment, camera framing (vary across beats: extreme ' +
+        'wide establishing, medium, close-up detail, low-angle), lighting and ' +
+        'atmosphere. 25 to 45 words. Every beat shows a DIFFERENT scene; never ' +
+        'reuse a composition.',
+      '- visual_prompt is NOT text-on-screen and NOT captions. No words, signs, ' +
+        'or lettering to render.',
       '- Facts must be real and verifiable. Do not invent dates, names, or events.',
       '',
       'Return ONLY valid JSON, no prose, no markdown fences: an array of beats',

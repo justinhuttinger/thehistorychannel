@@ -17,7 +17,20 @@ import { logger } from '../lib/logger.js';
 let driveWriteState = null; // null=unknown, true/false once probed
 
 async function driveClient() {
-  // Vault 'google_drive_sa' = service-account JSON with drive scope.
+  // Preferred: Vault 'google_drive_oauth' = { client_id, client_secret,
+  // refresh_token } acting AS THE OWNER. Required for uploads: Google rejects
+  // service-account media uploads outright (no storage quota).
+  try {
+    const oauth = await getSecretJson('google_drive_oauth');
+    if (oauth && oauth.refresh_token) {
+      const client = new google.auth.OAuth2(oauth.client_id, oauth.client_secret);
+      client.setCredentials({ refresh_token: oauth.refresh_token });
+      return google.drive({ version: 'v3', auth: client });
+    }
+  } catch {
+    // fall through to the service account (read/list still works there)
+  }
+  // Fallback: Vault 'google_drive_sa' = service-account JSON with drive scope.
   const sa = await getSecretJson('google_drive_sa');
   const auth = new google.auth.GoogleAuth({
     credentials: sa,
