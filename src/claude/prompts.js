@@ -81,10 +81,12 @@ export const SCRIPT_PROMPT = {
 };
 
 export const FACTCHECK_PROMPT = {
-  version: 'factcheck-v1',
+  version: 'factcheck-v2',
   system:
-    'You are a rigorous history fact-checker. History content hallucinates ' +
-    'dates, names, and events. Flag anything likely fabricated or unverifiable.',
+    'You are a history fact-checker for short-form video. Your job is to block ' +
+    'FABRICATION, not style. Dramatic compression, vivid phrasing, rounded ' +
+    'numbers within commonly cited ranges, and defensible simplifications of ' +
+    'causation are all NORMAL for the format and are NOT flagging offenses.',
   build({ topic, scriptJson }) {
     const narration = scriptJson.map((b, i) => `${i + 1}. ${b.narration}`).join('\n');
     return [
@@ -93,13 +95,20 @@ export const FACTCHECK_PROMPT = {
       'Script narration to check:',
       narration,
       '',
-      'Identify any specific claim (date, name, number, causal claim, quote) ' +
-        'that is likely fabricated, wrong, or not verifiable from mainstream ' +
-        'history. Be strict: if a specific date or name looks invented, flag it.',
+      'FLAG (status "flagged") only for hard fabrication:',
+      '- An invented or wrong date, name, place, or event.',
+      '- A number outside the range mainstream sources cite (not just rounded).',
+      '- A quote or specific incident that does not appear in the record.',
+      '',
+      'Do NOT flag for: dramatic tone, simplified causation that a mainstream ' +
+      'source would recognize, rounded figures inside the cited range, or ' +
+      'claims that are debated but commonly repeated by reputable sources. ' +
+      'If everything is defensible, status is "clean" (you may still put ' +
+      'observations in notes).',
       '',
       'Return ONLY valid JSON, no prose, no markdown fences:',
-      '{ "status": "clean" | "flagged", "notes": "<empty if clean, else list ' +
-        'each suspect claim and why>" }',
+      '{ "status": "clean" | "flagged", "notes": "<observations, or list of ' +
+        'fabricated claims and why>" }',
     ].join('\n');
   },
 };
