@@ -149,9 +149,14 @@ export async function compose({ beats, burnCaptions = true }) {
         caption = `,${filters.join(',')}`;
       }
 
+      // Still beats loop a frozen frame; video beats loop the Wan motion clip
+      // under the narration until the beat ends.
+      const visualInput = beat.isVideo
+        ? ['-stream_loop', '-1', '-i', imgPath]
+        : ['-loop', '1', '-i', imgPath];
       const args = [
         '-y', '-nostdin',
-        '-loop', '1', '-i', imgPath,
+        ...visualInput,
         '-i', audPath,
         '-vf', `${scalePad}${caption}`,
         ...(speed !== 1 ? ['-filter:a', `atempo=${speed}`] : []),

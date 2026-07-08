@@ -7,6 +7,7 @@
 import { gpuProvider } from './gpu.js';
 import { ttsProvider } from './tts.js';
 import { generateVisual } from './visuals.js';
+import { renderMap } from './maps.js';
 import { compose } from './compose.js';
 import { uploadToBucket } from '../lib/supabase.js';
 import { insertRenderJob, updateRenderJob, updateEpisode } from '../db/repositories.js';
@@ -56,6 +57,20 @@ export async function renderEpisode(episode, series) {
     const visuals = [];
     for (const beat of beats) {
       checkDeadline();
+      // Location beats show a REAL map (AI models hallucinate geography). If
+      // map rendering fails, fall back to a generated visual so the episode
+      // still completes.
+      if (beat.map_location) {
+        try {
+          visuals.push(await renderMap(beat.map_location));
+          continue;
+        } catch (err) {
+          logger.warn('map render failed, falling back to generated visual', {
+            place: beat.map_location,
+            error: String(err && err.message ? err.message : err),
+          });
+        }
+      }
       const out = await generateVisual({
         visualPrompt: beat.visual_prompt,
         styleSuffix: series.style_suffix,
@@ -73,6 +88,7 @@ export async function renderEpisode(episode, series) {
       durationSeconds: audio[i].durationSeconds,
       image: visuals[i].image,
       imageExt: visuals[i].ext,
+      isVideo: Boolean(visuals[i].isVideo),
     }));
     const master = await compose({ beats: composed, burnCaptions: true });
 

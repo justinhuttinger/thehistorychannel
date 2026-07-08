@@ -39,10 +39,11 @@ export const TOPIC_PROMPT = {
 };
 
 export const SCRIPT_PROMPT = {
-  version: 'script-v1',
+  version: 'script-v3',
   system:
-    'You are a scriptwriter for faceless animated history shorts. You write ' +
-    'economical, momentum-driven narration with a clear narrative arc. ' +
+    'You are a scriptwriter for faceless documentary-style history shorts. You ' +
+    'write economical, momentum-driven narration that actually TEACHES: viewers ' +
+    'should finish knowing what happened, why it happened, and what came after. ' +
     NO_EM_DASH_RULE,
   build({ series, topic, hook, profile }) {
     const beatRange = profile.beats.join(' to ');
@@ -55,25 +56,33 @@ export const SCRIPT_PROMPT = {
       `Write ${beatRange} beats totaling about ${profile.targetWords} words ` +
         `(roughly ${profile.minSeconds} to ${profile.maxSeconds} seconds at 150 words per minute).`,
       '',
-      'Requirements:',
+      'Story requirements (leave no obvious question unanswered):',
       '- The first beat opens with the hook in the first ~3 seconds.',
-      '- Clear narrative arc across beats. Momentum from the first line.',
-      '- Keep each beat narration SHORT: one punchy sentence, roughly 12 to 22 ' +
-        'words. Never two sentences in one beat.',
-      '- Each beat has "narration" (what the voice says) and "visual_prompt" ' +
-        '(a concrete scene for an image model).',
-      '- visual_prompt is a rich, cinematic single-image description: main ' +
-        'subject with era-accurate clothing/objects, specific setting, dramatic ' +
-        'action frozen mid-moment, camera framing (vary across beats: extreme ' +
-        'wide establishing, medium, close-up detail, low-angle), lighting and ' +
-        'atmosphere. 25 to 45 words. Every beat shows a DIFFERENT scene; never ' +
-        'reuse a composition.',
-      '- visual_prompt is NOT text-on-screen and NOT captions. No words, signs, ' +
-        'or lettering to render.',
+      '- Cover the full arc across the beats: WHERE it happened, the CAUSE or ' +
+        'mechanism (how could this even happen?), the event itself with concrete ' +
+        'nitty-gritty specifics (numbers, names, times, physical details), one ' +
+        'human moment (a real person, a survivor account, a chilling detail), ' +
+        'and the AFTERMATH or legacy (what changed, what remains today).',
+      '- Keep each beat narration to one or two tight sentences, roughly 15 to ' +
+        '25 words.',
+      '',
+      'Per-beat fields:',
+      '- "narration": what the voice says.',
+      '- "visual_prompt": a rich photographic scene description for an image ' +
+        'model: main subject with era-accurate clothing/objects, specific ' +
+        'setting, action, camera framing (vary across beats: extreme wide ' +
+        'establishing, medium, close-up detail, low-angle), lighting and ' +
+        'atmosphere. 25 to 45 words. Every beat a DIFFERENT scene. NOT ' +
+        'text-on-screen; no words, signs, or lettering to render.',
+      '- "map_location" (one beat only): on the beat where the location is ' +
+        'first named, add this field with the most specific mappable place, ' +
+        'e.g. "Lake Monoun, Cameroon". That beat shows a real map instead of a ' +
+        'generated image, so its visual_prompt may be brief. Omit the field on ' +
+        'all other beats.',
       '- Facts must be real and verifiable. Do not invent dates, names, or events.',
       '',
       'Return ONLY valid JSON, no prose, no markdown fences: an array of beats',
-      '[ { "narration": "...", "visual_prompt": "..." }, ... ]',
+      '[ { "narration": "...", "visual_prompt": "...", "map_location": "<optional>" }, ... ]',
       '',
       NO_EM_DASH_RULE,
     ].join('\n');

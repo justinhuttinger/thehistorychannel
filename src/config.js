@@ -36,7 +36,12 @@ export const config = {
   gpu: {
     provider: process.env.GPU_PROVIDER || 'mock', // mock | runpod | vastai
     instanceType: process.env.GPU_INSTANCE_TYPE || 'NVIDIA_RTX_4090',
-    maxRuntimeMin: Number(process.env.GPU_MAX_RUNTIME_MIN || 30),
+    maxRuntimeMin: Number(process.env.GPU_MAX_RUNTIME_MIN || 45),
+    // 'video' = short Wan motion clip per beat (looped under narration);
+    // 'image' = one still per beat (faster, cheaper).
+    wanMode: process.env.WAN_MODE || 'video',
+    // Wan latent constraint: (frames - 1) % 4 == 0. 49 frames ~= 2s at 24fps.
+    videoFrames: Number(process.env.WAN_VIDEO_FRAMES || 49),
   },
 
   tts: {
@@ -70,9 +75,10 @@ export const config = {
 };
 
 // Word budget targets by length profile (~150 wpm, §2/§6). More beats = a new
-// visual every ~6-10 seconds, which short-form pacing demands.
+// visual every ~6-10 seconds, which short-form pacing demands. 'short' runs
+// 45-60s so the story has room for cause, mechanism, and aftermath.
 export const LENGTH_PROFILES = {
-  short: { minSeconds: 30, maxSeconds: 45, targetWords: 95, beats: [4, 6] },
+  short: { minSeconds: 45, maxSeconds: 60, targetWords: 140, beats: [6, 8] },
   mono: { minSeconds: 60, maxSeconds: 90, targetWords: 190, beats: [8, 12] },
 };
 
